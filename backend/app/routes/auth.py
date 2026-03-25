@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -12,8 +13,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def seed_admin(db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == "admin@example.com").first()
     if existing:
-        return {"message": "Admin already exists", "email": existing.email, "password": "admin123"}
+        return {
+            "message": "Admin already exists",
+            "email": existing.email,
+            "password": "admin123",
+        }
+
     user = User(
+        id=str(uuid.uuid4()),
         full_name="System Administrator",
         email="admin@example.com",
         password_hash=hash_password("admin123"),
@@ -21,7 +28,13 @@ def seed_admin(db: Session = Depends(get_db)):
     )
     db.add(user)
     db.commit()
-    return {"message": "Admin created", "email": user.email, "password": "admin123"}
+    db.refresh(user)
+
+    return {
+        "message": "Admin created",
+        "email": user.email,
+        "password": "admin123",
+    }
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -29,6 +42,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
     token = create_access_token({"sub": user.id})
     return {
         "access_token": token,
